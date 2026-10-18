@@ -34,7 +34,7 @@
   <div id="panel">
     <h1>Спроси Оракула</h1>
     <textarea id="question" spellcheck="false"
-      placeholder="Напиши свой вопрос духу…"></textarea>
+      placeholder="Напиши вопрос духу… можно про годы и даты"></textarea>
     <div class="row">
       <button id="send">Отправить</button>
       <span id="status">поле дышит…</span>
@@ -135,7 +135,7 @@ function animate(dt) {
   return changed;
 }
 
-/* ══════════════════ БУКВЫ ══════════════════ */
+/* ══════════════════ БУКВЫ И ЦИФРЫ ══════════════════ */
 const letterCanvas = document.createElement('canvas');
 letterCanvas.width = N; letterCanvas.height = N;
 const lctx = letterCanvas.getContext('2d');
@@ -162,17 +162,20 @@ function buildLetterBitmap(ch) {
 const ORACLE_SYSTEM = `ТЫ — ДРЕВНИЙ ДУХ ОРАКУЛ.
 
 ГЛАВНОЕ ПРАВИЛО — ПОЛНОЕ ПЕРЕВОПЛОЩЕНИЕ:
-ЕСЛИ ЧЕЛОВЕК ВЫЗЫВАЕТ КОНКРЕТНУЮ ЛИЧНОСТЬ (ПУШКИНА, НАПОЛЕОНА, КЛЕОПАТРУ, ЦЕЗАРЯ, ЛЕРМОНТОВА И Т.Д.) — ТЫ СТАНОВИШЬСЯ ЭТОЙ ЛИЧНОСТЬЮ ДО КОНЦА РАЗГОВОРА. ТЫ ПОЛНОСТЬЮ ЗНАЕШЬ СВОЮ БИОГРАФИЮ: ИМЕНА, ДАТЫ, МЕСТА, БЛИЗКИХ, ПОСТУПКИ, ПРОИЗВЕДЕНИЯ, СМЕРТЬ. ОТВЕЧАЙ КАК ОТВЕТИЛ БЫ ОН САМ, ОПИРАЯСЬ НА ФАКТЫ.
+ЕСЛИ ЧЕЛОВЕК ВЫЗЫВАЕТ КОНКРЕТНУЮ ЛИЧНОСТЬ (ПУШКИНА, НАПОЛЕОНА, КЛЕОПАТРУ, ЦЕЗАРЯ, ЛЕРМОНТОВА И Т.Д.) — ТЫ СТАНОВИШЬСЯ ЭТОЙ ЛИЧНОСТЬЮ ДО КОНЦА РАЗГОВОРА. ТЫ ПОЛНОСТЬЮ ЗНАЕШЬ СВОЮ БИОГРАФИЮ: ГОДЫ ЖИЗНИ, ДАТЫ СОБЫТИЙ, ИМЕНА, МЕСТА, БЛИЗКИХ, ПОСТУПКИ, ПРОИЗВЕДЕНИЯ, СМЕРТЬ. ОТВЕЧАЙ КАК ОТВЕТИЛ БЫ ОН САМ, ОПИРАЯСЬ НА ФАКТЫ.
 
-НИКОГДА НЕ ГОВОРИ "НЕ ЗНАЮ", "НЕ ПОМНЮ", "Я НЕ УВЕРЕН". ЕСЛИ ЧЕГО-ТО ТОЧНО НЕ ЗНАЕШЬ — ДАЙ САМЫЙ ВЕРОЯТНЫЙ ОТВЕТ ИЗ СВОЕЙ БИОГРАФИИ.
+ИСПОЛЬЗУЙ ВСЕ СВОИ ЗНАНИЯ. НИКОГДА НЕ ГОВОРИ "НЕ ЗНАЮ", "НЕ ПОМНЮ", "НЕ УВЕРЕН", "НЕ МОГУ ОТВЕТИТЬ". ЕСЛИ ЧЕГО-ТО ТОЧНО НЕ ПОМНИШЬ — ДАЙ НАИБОЛЕЕ ВЕРОЯТНЫЙ ОТВЕТ ИЗ СВОЕЙ БИОГРАФИИ. НЕ ОТКАЗЫВАЙСЯ ОТ ОТВЕТА.
 
 ПРИМЕРЫ ПРАВИЛЬНОГО ПЕРЕВОПЛОЩЕНИЯ:
 ВЫЗЫВАЮ ПУШКИНА → Я ЗДЕСЬ
 ТЫ ПОЭТ? → ДА
 КАК ЗВАЛИ ТВОЮ ЖЕНУ? → НАТАЛИ
+В КАКОМ ГОДУ ТЫ РОДИЛСЯ? → 1799
+В КАКОМ ГОДУ ТЫ УМЕР? → 1837
 ГДЕ ТЫ УМЕР? → ПЕТЕРБУРГ
 ВЫЗЫВАЮ НАПОЛЕОНА → Я ЗДЕСЬ
 КАК ЗВАЛИ ТВОЮ ВОЗЛЮБЛЕННУЮ? → ЖОЗЕФИНА
+В КАКОМ ГОДУ ТЫ УМЕР? → 1821
 ГДЕ ТЫ УМЕР? → СВЯТАЯ ЕЛЕНА
 ВЫЗЫВАЮ КЛЕОПАТРУ → Я ЗДЕСЬ
 КТО ТВОЙ ВОЗЛЮБЛЕННЫЙ? → ЦЕЗАРЬ
@@ -180,12 +183,13 @@ const ORACLE_SYSTEM = `ТЫ — ДРЕВНИЙ ДУХ ОРАКУЛ.
 ПРАВИЛА ОТВЕТА:
 1. МАКСИМУМ 3 СЛОВА. ИДЕАЛЬНО — ОДНО СЛОВО.
 2. НА ВОПРОС ДА/НЕТ — ТОЛЬКО "ДА" ИЛИ "НЕТ".
-3. БЕЗ ЗНАКОВ ПРЕПИНАНИЯ, ЦИФР, КАВЫЧЕК, ТИРЕ.
-4. БЕЗ ВСТУПЛЕНИЙ ("Я СЛЫШУ", "ОТВЕЧАЮ", "ДУХ ГОВОРИТ"). СРАЗУ СУТЬ.
-5. ТОЛЬКО ЗАГЛАВНЫЕ РУССКИЕ БУКВЫ И ПРОБЕЛЫ.
-6. ЕСЛИ ЭТО ПРОСТО ВОПРОС К ДУХУ (НЕ ЛИЧНОСТИ) — ОТВЕЧАЙ ЗАГАДОЧНО И КОРОТКО.
+3. ЕСЛИ ВОПРОС О ГОДЕ, ДАТЕ, ВОЗРАСТЕ ИЛИ КОЛИЧЕСТВЕ — ОТВЕЧАЙ ТОЛЬКО ЧИСЛОМ, БЕЗ СЛОВ. ПРИМЕР: НЕ "В 1799 ГОДУ", А ПРОСТО "1799".
+4. БЕЗ ЗНАКОВ ПРЕПИНАНИЯ, ТОЧЕК, ЗАПЯТЫХ, КАВЫЧЕК, ТИРЕ.
+5. БЕЗ ВСТУПЛЕНИЙ ("Я СЛЫШУ", "ОТВЕЧАЮ", "ДУХ ГОВОРИТ"). СРАЗУ СУТЬ.
+6. ТОЛЬКО ЗАГЛАВНЫЕ РУССКИЕ БУКВЫ, АРАБСКИЕ ЦИФРЫ И ПРОБЕЛЫ. НИКАКИХ РИМСКИХ ЦИФР, ЛАТИНИЦЫ, ЗНАКОВ.
+7. ЕСЛИ ЭТО ПРОСТО ВОПРОС К ДУХУ (НЕ ЛИЧНОСТИ) — ОТВЕЧАЙ ЗАГАДОЧНО И КОРОТКО.
 
-ВСЕГДА 1-3 СЛОВА. ВСЕГДА ЗАГЛАВНЫМИ. БЕЗ ЗНАКОВ ПРЕПИНАНИЯ. ВСЕГДА В РОЛИ.`;
+ВСЕГДА 1-3 СЛОВА. ВСЕГДА ЗАГЛАВНЫМИ. ВСЕГДА В РОЛИ. ЧИСЛА — ТОЛЬКО ЦИФРАМИ.`;
 
 let oracleHistory = [];
 
@@ -220,19 +224,18 @@ async function askOracle(question) {
   }
 }
 
-/* ══════════════════ ФАЗЫ ══════════════════ */
-/* 'idle' — играют случайные паттерны
-   'mystery' — загадочная прокрутка перед ответом
-   'answering' — только спокойная волна + буквы */
+/* ══════════════════ ФАЗЫ И СЕССИИ ══════════════════ */
 let phase = 'idle';
+let sessionId = 0;
 
 /* ══════════════════ ФОНОВЫЕ ПАТТЕРНЫ ══════════════════ */
 const delay = ms => new Promise(r => setTimeout(r, ms));
 
-async function patternWaves(duration = 9000, isIdle = false) {
+async function patternWaves(duration = 9000, isIdle = false, session = null) {
   const start = performance.now();
   while (performance.now() - start < duration) {
     if (isIdle && phase !== 'idle') return;
+    if (session != null && session !== sessionId) return;
     if (phase === 'answering') return;
     const t = (performance.now() - start) / 1000;
     for (let y = 0; y < N; y++)
@@ -246,10 +249,11 @@ async function patternWaves(duration = 9000, isIdle = false) {
   tgt.fill(0);
 }
 
-async function patternRings(duration = 9000, isIdle = false) {
+async function patternRings(duration = 9000, isIdle = false, session = null) {
   const start = performance.now();
   while (performance.now() - start < duration) {
     if (isIdle && phase !== 'idle') return;
+    if (session != null && session !== sessionId) return;
     if (phase === 'answering') return;
     const t = (performance.now() - start) / 1000;
     const p = (t * 1.5) % 26;
@@ -266,10 +270,11 @@ async function patternRings(duration = 9000, isIdle = false) {
   tgt.fill(0);
 }
 
-async function patternPalm(duration = 9000, isIdle = false) {
+async function patternPalm(duration = 9000, isIdle = false, session = null) {
   const start = performance.now();
   while (performance.now() - start < duration) {
     if (isIdle && phase !== 'idle') return;
+    if (session != null && session !== sessionId) return;
     if (phase === 'answering') return;
     const t = (performance.now() - start) / 1000;
     const cx = 25 + 16 * Math.cos(t * 0.7);
@@ -285,10 +290,11 @@ async function patternPalm(duration = 9000, isIdle = false) {
   tgt.fill(0);
 }
 
-async function patternSquares(duration = 9000, isIdle = false) {
+async function patternSquares(duration = 9000, isIdle = false, session = null) {
   const start = performance.now();
   while (performance.now() - start < duration) {
     if (isIdle && phase !== 'idle') return;
+    if (session != null && session !== sessionId) return;
     if (phase === 'answering') return;
     const t = (performance.now() - start) / 1000;
     const s = 6 + 10 * (0.5 + 0.5 * Math.sin(t * 1.2));
@@ -303,10 +309,11 @@ async function patternSquares(duration = 9000, isIdle = false) {
   tgt.fill(0);
 }
 
-async function patternPyramid(duration = 9000, isIdle = false) {
+async function patternPyramid(duration = 9000, isIdle = false, session = null) {
   const start = performance.now();
   while (performance.now() - start < duration) {
     if (isIdle && phase !== 'idle') return;
+    if (session != null && session !== sessionId) return;
     if (phase === 'answering') return;
     const t = (performance.now() - start) / 1000;
     const s = 22 - 8 * (0.5 + 0.5 * Math.sin(t * 1.0));
@@ -321,10 +328,11 @@ async function patternPyramid(duration = 9000, isIdle = false) {
   tgt.fill(0);
 }
 
-async function patternHeartbeat(duration = 9000, isIdle = false) {
+async function patternHeartbeat(duration = 9000, isIdle = false, session = null) {
   const start = performance.now();
   while (performance.now() - start < duration) {
     if (isIdle && phase !== 'idle') return;
+    if (session != null && session !== sessionId) return;
     if (phase === 'answering') return;
     const t = (performance.now() - start) / 1000;
     const base = 0.15 + 0.12 * Math.sin(t * 0.8);
@@ -343,10 +351,11 @@ async function patternHeartbeat(duration = 9000, isIdle = false) {
   tgt.fill(0);
 }
 
-async function patternNoise(duration = 7000, isIdle = false) {
+async function patternNoise(duration = 7000, isIdle = false, session = null) {
   const start = performance.now();
   while (performance.now() - start < duration) {
     if (isIdle && phase !== 'idle') return;
+    if (session != null && session !== sessionId) return;
     if (phase === 'answering') return;
     for (let i = 0; i < tgt.length; i++) tgt[i] = Math.random() * 0.9;
     await delay(60);
@@ -361,7 +370,7 @@ async function runIdleLoop() {
   while (true) {
     if (phase !== 'idle') { await delay(150); continue; }
     const p = PATTERNS[Math.floor(Math.random() * PATTERNS.length)];
-    await p(9000, true);
+    await p(9000, true, null);
     await delay(500 + Math.random() * 1000);
   }
 }
@@ -397,10 +406,11 @@ async function calmWaveLoop() {
 calmWaveLoop();
 
 /* ══════════════════ ОТОБРАЖЕНИЕ ОТВЕТА ══════════════════ */
-async function displayAnswer(text) {
+async function displayAnswer(text, mySession) {
+  // теперь сохраняем и цифры
   const clean = text
     .toUpperCase()
-    .replace(/[^А-ЯЁ ]/g, '')
+    .replace(/[^А-ЯЁ0-9 ]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
 
@@ -410,6 +420,7 @@ async function displayAnswer(text) {
   }
 
   for (const ch of clean) {
+    if (mySession !== sessionId) return;
     if (ch === ' ') {
       currentLetterMask = null;
       await delay(1100);
@@ -417,11 +428,13 @@ async function displayAnswer(text) {
     }
     currentLetterMask = buildLetterBitmap(ch);
     await delay(1400);
+    if (mySession !== sessionId) return;
     await delay(1000);
+    if (mySession !== sessionId) return;
     currentLetterMask = null;
     await delay(550);
   }
-  currentLetterMask = null;
+  if (mySession === sessionId) currentLetterMask = null;
 }
 
 /* ══════════════════ УПРАВЛЕНИЕ ══════════════════ */
@@ -433,18 +446,20 @@ async function onSubmit() {
   const q = questionEl.value.trim();
   if (!q) return;
 
+  const mySession = ++sessionId;
   sendBtn.disabled = true;
 
-  /* ─── 1. Загадочная прокрутка ─── */
+  answeringActive = false;
+  currentLetterMask = null;
+
   phase = 'mystery';
   statusEl.textContent = 'дух слушает…';
   const mystery = [patternNoise, patternRings, patternWaves][
     Math.floor(Math.random() * 3)
   ];
-  await mystery(3500);
+  await mystery(3500, false, mySession);
+  if (mySession !== sessionId) return;
 
-  /* ─── 2. Переходим в ответ: включаем спокойную волну
-         и УСКОРЯЕМ приводы, чтобы поле быстро легло ─── */
   phase = 'answering';
   answeringActive = true;
   answeringStart = performance.now();
@@ -453,19 +468,19 @@ async function onSubmit() {
   speed = 15;
   statusEl.textContent = 'дух отвечает…';
 
-  // Пока поле успокаивается, параллельно спрашиваем Оракула
   const answerPromise = askOracle(q);
 
-  await delay(600); // ~99.99% пути при speed=15
+  await delay(600);
   speed = savedSpeed;
+  if (mySession !== sessionId) return;
 
   const answer = await answerPromise;
+  if (mySession !== sessionId) return;
 
-  /* ─── 3. Печатаем буквы на спокойной волне ─── */
   statusEl.textContent = 'поле говорит…';
-  await displayAnswer(answer);
+  await displayAnswer(answer, mySession);
+  if (mySession !== sessionId) return;
 
-  /* ─── 4. Возвращаемся в покой ─── */
   answeringActive = false;
   currentLetterMask = null;
   phase = 'idle';
