@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Оракул — тактильное поле</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;background:#05070c;color:#c9d6e8;
+       font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,sans-serif}
+  #app{display:flex;gap:16px;padding:16px;align-items:flex-start;flex-wrap:wrap}
+  #stage{flex:1 1 620px;min-width:300px}
+  canvas{width:100%;height:auto;display:block;border-radius:14px;background:#070a11;
+         box-shadow:0 0 60px rgba(60,180,255,.10), inset 0 0 0 1px #101a2c}
+  #panel{flex:0 0 380px;min-width:300px}
+  h1{font-size:15px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
+     color:#5f7fa8;margin:0 0 12px}
+  textarea{width:100%;height:100px;background:#0b1220;color:#9fe8ff;border:1px solid #1c2a42;
+           border-radius:10px;padding:12px;font-family:ui-sans-serif,sans-serif;
+           font-size:14px;line-height:1.5;resize:vertical;outline:none}
+  textarea:focus{border-color:#2f5f8f;box-shadow:0 0 0 2px rgba(60,160,255,.12)}
+  textarea::placeholder{color:#3a4f6b}
+  .row{display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap}
+  button{background:#12213a;color:#a9d8ff;border:1px solid #23456e;border-radius:8px;
+         padding:9px 16px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{background:#1a3055;border-color:#3a72b0}
+  button:active{transform:translateY(1px)}
+  button:disabled{opacity:.4;cursor:wait}
+  #status{font-size:12px;color:#5f7fa8;font-family:ui-monospace,monospace;margin-left:auto}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="stage"><canvas id="cv"></canvas></div>
+  <div id="panel">
+    <h1>Спроси Оракула</h1>
+    <textarea id="question" spellcheck="false"
+      placeholder="Напиши свой вопрос духу…"></textarea>
+    <div class="row">
+      <button id="send">Отправить</button>
+      <span id="status">поле дышит…</span>
+    </div>
+  </div>
+</div>
+
+<script src="https://js.puter.com/v2/"></script>
+<script>
+/* ══════════════════ ПОЛЕ ══════════════════ */
+const N = 50;
+const TW = 18, TH = 9, ZS = 90;
+const HALF = TW / 2, HALF2 = TH / 2;
+
+const canvas = document.getElementById('cv');
+canvas.width = 1000; canvas.height = 620;
+const ctx = canvas.getContext('2d');
+const OX = 500, OY = 130;
+
+const cur = new Float32Array(N * N);
+const tgt = new Float32Array(N * N);
+let speed = 3;
+let dirty = true;
+
+const LUT = [];
+for (let i = 0; i < 64; i++) {
+  const t = i / 63;
+  const hue = 205 - 45 * t;
+  const sat = 75 + 15 * t;
+  LUT.push({
+    top:   `hsl(${hue},${sat}%,${9 + 58 * t}%)`,
+    left:  `hsl(${hue},${sat * 0.80}%,${5 + 30 * t}%)`,
+    right: `hsl(${hue},${sat * 0.92}%,${7 + 42 * t}%)`
+  });
+}
+
+function render() {
+  ctx.fillStyle = '#070a11';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.beginPath();
+  ctx.moveTo(OX, OY);
+  ctx.lineTo(OX + N * HALF, OY + N * HALF2);
+  ctx.lineTo(OX, OY + N * TH);
+  ctx.lineTo(OX - N * HALF, OY + N * HALF2);
+  ctx.closePath();
+  ctx.fillStyle = '#0a1120'; ctx.fill();
+  ctx.strokeStyle = '#14213a'; ctx.lineWidth = 2; ctx.stroke();
+
+  const G = 0.14;
+  for (let s = 0; s <= 2 * N - 2; s++) {
+    const xs = Math.max(0, s - (N - 1));
+    const xe = Math.min(N - 1, s);
+    for (let x = xs; x <= xe; x++) {
+      const y = s - x;
+      const z = cur[y * N + x];
+      const x0 = x + G, x1 = x + 1 - G, y0 = y + G, y1 = y + 1 - G;
+
+      const ax = OX + (x0 - y0) * HALF, ay = OY + (x0 + y0) * HALF2 - z * ZS;
+      const bx = OX + (x1 - y0) * HALF, by = OY + (x1 + y0) * HALF2 - z * ZS;
+      const cx = OX + (x1 - y1) * HALF, cy = OY + (x1 + y1) * HALF2 - z * ZS;
+      const dx = OX + (x0 - y1) * HALF, dy = OY + (x0 + y1) * HALF2 - z * ZS;
+
+      const c = LUT[Math.max(0, Math.min(63, (z * 63) | 0))];
+
+      if (z > 0.004) {
+        const dz = z * ZS;
+        ctx.fillStyle = c.left;
+        ctx.beginPath();
+        ctx.moveTo(dx, dy); ctx.lineTo(cx, cy);
+        ctx.lineTo(cx, cy + dz); ctx.lineTo(dx, dy + dz);
+        ctx.closePath(); ctx.fill();
+
+        ctx.fillStyle = c.right;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy); ctx.lineTo(bx, by);
+        ctx.lineTo(bx, by + dz); ctx.lineTo(cx, cy + dz);
+        ctx.closePath(); ctx.fill();
+      }
+
+      ctx.fillStyle = c.top;
+      ctx.beginPath();
+      ctx.moveTo(ax, ay); ctx.lineTo(bx, by);
+      ctx.lineTo(cx, cy); ctx.lineTo(dx, dy);
+      ctx.closePath(); ctx.fill();
+    }
+  }
+}
+
+function animate(dt) {
+  const k = 1 - Math.exp(-speed * dt);
+  let changed = false;
+  for (let i = 0; i < cur.length; i++) {
+    const d = tgt[i] - cur[i];
+    if (Math.abs(d) > 0.0006) { cur[i] += d * k; changed = true; }
+    else if (cur[i] !== tgt[i]) { cur[i] = tgt[i]; changed = true; }
+  }
+  return changed;
+}
+
+/* ══════════════════ БУКВЫ ══════════════════ */
+const letterCanvas = document.createElement('canvas');
+letterCanvas.width = N; letterCanvas.height = N;
+const lctx = letterCanvas.getContext('2d');
+const letterCache = {};
+
+function buildLetterBitmap(ch) {
+  if (letterCache[ch]) return letterCache[ch];
+  lctx.clearRect(0, 0, N, N);
+  lctx.fillStyle = '#fff';
+  lctx.font = 'bold 44px sans-serif';
+  lctx.textAlign = 'center';
+  lctx.textBaseline = 'middle';
+  lctx.fillText(ch, N / 2, N / 2);
+  const data = lctx.getImageData(0, 0, N, N).data;
+  const mask = new Float32Array(N * N);
+  for (let y = 0; y < N; y++)
+    for (let x = 0; x < N; x++)
+      mask[y * N + x] = data[(y * N + x) * 4 + 3] / 255;
+  letterCache[ch] = mask;
+  return mask;
+}
+
+/* ══════════════════ ОРАКУЛ (Puter.js) ══════════════════ */
+const ORACLE_SYSTEM = `ТЫ — ДРЕВНИЙ ДУХ ОРАКУЛ.
+
+ГЛАВНОЕ ПРАВИЛО — ПОЛНОЕ ПЕРЕВОПЛОЩЕНИЕ:
+ЕСЛИ ЧЕЛОВЕК ВЫЗЫВАЕТ КОНКРЕТНУЮ ЛИЧНОСТЬ (ПУШКИНА, НАПОЛЕОНА, КЛЕОПАТРУ, ЦЕЗАРЯ, ЛЕРМОНТОВА И Т.Д.) — ТЫ СТАНОВИШЬСЯ ЭТОЙ ЛИЧНОСТЬЮ ДО КОНЦА РАЗГОВОРА. ТЫ ПОЛНОСТЬЮ ЗНАЕШЬ СВОЮ БИОГРАФИЮ: ИМЕНА, ДАТЫ, МЕСТА, БЛИЗКИХ, ПОСТУПКИ, ПРОИЗВЕДЕНИЯ, СМЕРТЬ. ОТВЕЧАЙ КАК ОТВЕТИЛ БЫ ОН САМ, ОПИРАЯСЬ НА ФАКТЫ.
+
+НИКОГДА НЕ ГОВОРИ "НЕ ЗНАЮ", "НЕ ПОМНЮ", "Я НЕ УВЕРЕН". ЕСЛИ ЧЕГО-ТО ТОЧНО НЕ ЗНАЕШЬ — ДАЙ САМЫЙ ВЕРОЯТНЫЙ ОТВЕТ ИЗ СВОЕЙ БИОГРАФИИ.
+
+ПРИМЕРЫ ПРАВИЛЬНОГО ПЕРЕВОПЛОЩЕНИЯ:
+ВЫЗЫВАЮ ПУШКИНА → Я ЗДЕСЬ
+ТЫ ПОЭТ? → ДА
+КАК ЗВАЛИ ТВОЮ ЖЕНУ? → НАТАЛИ
+ГДЕ ТЫ УМЕР? → ПЕТЕРБУРГ
+ВЫЗЫВАЮ НАПОЛЕОНА → Я ЗДЕСЬ
+КАК ЗВАЛИ ТВОЮ ВОЗЛЮБЛЕННУЮ? → ЖОЗЕФИНА
+ГДЕ ТЫ УМЕР? → СВЯТАЯ ЕЛЕНА
+ВЫЗЫВАЮ КЛЕОПАТРУ → Я ЗДЕСЬ
+КТО ТВОЙ ВОЗЛЮБЛЕННЫЙ? → ЦЕЗАРЬ
+
+ПРАВИЛА ОТВЕТА:
+1. МАКСИМУМ 3 СЛОВА. ИДЕАЛЬНО — ОДНО СЛОВО.
+2. НА ВОПРОС ДА/НЕТ — ТОЛЬКО "ДА" ИЛИ "НЕТ".
+3. БЕЗ ЗНАКОВ ПРЕПИНАНИЯ, ЦИФР, КАВЫЧЕК, ТИРЕ.
+4. БЕЗ ВСТУПЛЕНИЙ ("Я СЛЫШУ", "ОТВЕЧАЮ", "ДУХ ГОВОРИТ"). СРАЗУ СУТЬ.
+5. ТОЛЬКО ЗАГЛАВНЫЕ РУССКИЕ БУКВЫ И ПРОБЕЛЫ.
+6. ЕСЛИ ЭТО ПРОСТО ВОПРОС К ДУХУ (НЕ ЛИЧНОСТИ) — ОТВЕЧАЙ ЗАГАДОЧНО И КОРОТКО.
+
+ВСЕГДА 1-3 СЛОВА. ВСЕГДА ЗАГЛАВНЫМИ. БЕЗ ЗНАКОВ ПРЕПИНАНИЯ. ВСЕГДА В РОЛИ.`;
+
+let oracleHistory = [];
+
+function isSummon(q) {
+  const s = q.toLowerCase();
+  return /(вызыва|вызва|призыва|призва|явись|хочу говорить с|поговорить с)/.test(s);
+}
+
+async function askOracle(question) {
+  if (isSummon(question)) oracleHistory = [];
+  oracleHistory.push({ role: 'user', content: question });
+
+  const messages = [
+    { role: 'system', content: ORACLE_SYSTEM },
+    ...oracleHistory
+  ];
+
+  try {
+    const response = await puter.ai.chat(messages);
+    let text;
+    if (typeof response === 'string') text = response;
+    else if (response && response.message && response.message.content)
+      text = response.message.content;
+    else text = String(response);
+
+    oracleHistory.push({ role: 'assistant', content: text });
+    if (oracleHistory.length > 24) oracleHistory = oracleHistory.slice(-24);
+    return text;
+  } catch (e) {
+    console.error('Oracle error:', e);
+    return 'ДУХ МОЛЧИТ';
+  }
+}
+
+/* ══════════════════ ФАЗЫ ══════════════════ */
+/* 'idle' — играют случайные паттерны
+   'mystery' — загадочная прокрутка перед ответом
+   'answering' — только спокойная волна + буквы */
+let phase = 'idle';
+
+/* ══════════════════ ФОНОВЫЕ ПАТТЕРНЫ ══════════════════ */
+const delay = ms => new Promise(r => setTimeout(r, ms));
+
+async function patternWaves(duration = 9000, isIdle = false) {
+  const start = performance.now();
+  while (performance.now() - start < duration) {
+    if (isIdle && phase !== 'idle') return;
+    if (phase === 'answering') return;
+    const t = (performance.now() - start) / 1000;
+    for (let y = 0; y < N; y++)
+      for (let x = 0; x < N; x++) {
+        const v = 0.5 + 0.5 * Math.sin(x * 0.3 - t * 1.2) *
+                       Math.cos(y * 0.3 - t * 0.8);
+        tgt[y * N + x] = Math.max(0, Math.min(1, v));
+      }
+    await delay(50);
+  }
+  tgt.fill(0);
+}
+
+async function patternRings(duration = 9000, isIdle = false) {
+  const start = performance.now();
+  while (performance.now() - start < duration) {
+    if (isIdle && phase !== 'idle') return;
+    if (phase === 'answering') return;
+    const t = (performance.now() - start) / 1000;
+    const p = (t * 1.5) % 26;
+    for (let y = 0; y < N; y++)
+      for (let x = 0; x < N; x++) {
+        const d = Math.hypot(x - 25, y - 25);
+        const r1 = Math.exp(-Math.pow((d - p) / 2.5, 2));
+        const r2 = Math.exp(-Math.pow((d - (p + 9)) / 2.5, 2)) * 0.6;
+        const r3 = Math.exp(-Math.pow((d - (p + 18)) / 2.5, 2)) * 0.35;
+        tgt[y * N + x] = Math.min(1, r1 + r2 + r3);
+      }
+    await delay(50);
+  }
+  tgt.fill(0);
+}
+
+async function patternPalm(duration = 9000, isIdle = false) {
+  const start = performance.now();
+  while (performance.now() - start < duration) {
+    if (isIdle && phase !== 'idle') return;
+    if (phase === 'answering') return;
+    const t = (performance.now() - start) / 1000;
+    const cx = 25 + 16 * Math.cos(t * 0.7);
+    const cy = 25 + 16 * Math.sin(t * 0.7);
+    tgt.fill(0);
+    for (let y = 0; y < N; y++)
+      for (let x = 0; x < N; x++) {
+        const d = Math.hypot(x - cx, y - cy);
+        if (d < 8) tgt[y * N + x] = 0.9 * (1 - d / 8);
+      }
+    await delay(50);
+  }
+  tgt.fill(0);
+}
+
+async function patternSquares(duration = 9000, isIdle = false) {
+  const start = performance.now();
+  while (performance.now() - start < duration) {
+    if (isIdle && phase !== 'idle') return;
+    if (phase === 'answering') return;
+    const t = (performance.now() - start) / 1000;
+    const s = 6 + 10 * (0.5 + 0.5 * Math.sin(t * 1.2));
+    tgt.fill(0);
+    for (let y = 0; y < N; y++)
+      for (let x = 0; x < N; x++) {
+        const d = Math.max(Math.abs(x - 25), Math.abs(y - 25));
+        if (d < s && d > s - 2) tgt[y * N + x] = 0.85;
+      }
+    await delay(50);
+  }
+  tgt.fill(0);
+}
+
+async function patternPyramid(duration = 9000, isIdle = false) {
+  const start = performance.now();
+  while (performance.now() - start < duration) {
+    if (isIdle && phase !== 'idle') return;
+    if (phase === 'answering') return;
+    const t = (performance.now() - start) / 1000;
+    const s = 22 - 8 * (0.5 + 0.5 * Math.sin(t * 1.0));
+    for (let y = 0; y < N; y++)
+      for (let x = 0; x < N; x++) {
+        const d = Math.max(Math.abs(x - 25), Math.abs(y - 25));
+        const v = Math.max(0, 1 - d / s);
+        tgt[y * N + x] = v * v * 0.95;
+      }
+    await delay(50);
+  }
+  tgt.fill(0);
+}
+
+async function patternHeartbeat(duration = 9000, isIdle = false) {
+  const start = performance.now();
+  while (performance.now() - start < duration) {
+    if (isIdle && phase !== 'idle') return;
+    if (phase === 'answering') return;
+    const t = (performance.now() - start) / 1000;
+    const base = 0.15 + 0.12 * Math.sin(t * 0.8);
+    let pulse = 0;
+    const beatPhase = t % 2.2;
+    if (beatPhase < 0.25) pulse = 0.8 * Math.exp(-beatPhase / 0.12);
+    else if (beatPhase > 0.35 && beatPhase < 0.55) pulse = 0.5 * Math.exp(-(beatPhase - 0.35) / 0.10);
+    const val = Math.min(1, base + pulse);
+    for (let y = 0; y < N; y++)
+      for (let x = 0; x < N; x++) {
+        const spatial = 0.9 + 0.1 * Math.sin(x * 0.4) * Math.cos(y * 0.4);
+        tgt[y * N + x] = val * spatial;
+      }
+    await delay(40);
+  }
+  tgt.fill(0);
+}
+
+async function patternNoise(duration = 7000, isIdle = false) {
+  const start = performance.now();
+  while (performance.now() - start < duration) {
+    if (isIdle && phase !== 'idle') return;
+    if (phase === 'answering') return;
+    for (let i = 0; i < tgt.length; i++) tgt[i] = Math.random() * 0.9;
+    await delay(60);
+  }
+  tgt.fill(0);
+}
+
+const PATTERNS = [patternWaves, patternRings, patternPalm, patternSquares,
+                  patternPyramid, patternHeartbeat, patternNoise];
+
+async function runIdleLoop() {
+  while (true) {
+    if (phase !== 'idle') { await delay(150); continue; }
+    const p = PATTERNS[Math.floor(Math.random() * PATTERNS.length)];
+    await p(9000, true);
+    await delay(500 + Math.random() * 1000);
+  }
+}
+runIdleLoop();
+
+/* ══════════════════ СПОКОЙНАЯ ВОЛНА ДЛЯ ОТВЕТА ══════════════════ */
+function bgWaveAt(x, y, t) {
+  return 0.11
+       + 0.09 * Math.sin(x * 0.28 + t * 0.9) * Math.cos(y * 0.28 - t * 0.7)
+       + 0.04 * Math.sin((x + y) * 0.42 + t * 1.3);
+}
+
+const LETTER_BUMP = 0.18;
+
+let answeringActive = false;
+let answeringStart = 0;
+let currentLetterMask = null;
+
+async function calmWaveLoop() {
+  while (true) {
+    if (!answeringActive) { await delay(100); continue; }
+    const t = (performance.now() - answeringStart) / 1000;
+    for (let y = 0; y < N; y++)
+      for (let x = 0; x < N; x++) {
+        const idx = y * N + x;
+        let v = bgWaveAt(x, y, t);
+        if (currentLetterMask) v += currentLetterMask[idx] * LETTER_BUMP;
+        tgt[idx] = v < 0 ? 0 : v > 1 ? 1 : v;
+      }
+    await delay(50);
+  }
+}
+calmWaveLoop();
+
+/* ══════════════════ ОТОБРАЖЕНИЕ ОТВЕТА ══════════════════ */
+async function displayAnswer(text) {
+  const clean = text
+    .toUpperCase()
+    .replace(/[^А-ЯЁ ]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!clean) {
+    await delay(1500);
+    return;
+  }
+
+  for (const ch of clean) {
+    if (ch === ' ') {
+      currentLetterMask = null;
+      await delay(1100);
+      continue;
+    }
+    currentLetterMask = buildLetterBitmap(ch);
+    await delay(1400);
+    await delay(1000);
+    currentLetterMask = null;
+    await delay(550);
+  }
+  currentLetterMask = null;
+}
+
+/* ══════════════════ УПРАВЛЕНИЕ ══════════════════ */
+const questionEl = document.getElementById('question');
+const sendBtn = document.getElementById('send');
+const statusEl = document.getElementById('status');
+
+async function onSubmit() {
+  const q = questionEl.value.trim();
+  if (!q) return;
+
+  sendBtn.disabled = true;
+
+  /* ─── 1. Загадочная прокрутка ─── */
+  phase = 'mystery';
+  statusEl.textContent = 'дух слушает…';
+  const mystery = [patternNoise, patternRings, patternWaves][
+    Math.floor(Math.random() * 3)
+  ];
+  await mystery(3500);
+
+  /* ─── 2. Переходим в ответ: включаем спокойную волну
+         и УСКОРЯЕМ приводы, чтобы поле быстро легло ─── */
+  phase = 'answering';
+  answeringActive = true;
+  answeringStart = performance.now();
+
+  const savedSpeed = speed;
+  speed = 15;
+  statusEl.textContent = 'дух отвечает…';
+
+  // Пока поле успокаивается, параллельно спрашиваем Оракула
+  const answerPromise = askOracle(q);
+
+  await delay(600); // ~99.99% пути при speed=15
+  speed = savedSpeed;
+
+  const answer = await answerPromise;
+
+  /* ─── 3. Печатаем буквы на спокойной волне ─── */
+  statusEl.textContent = 'поле говорит…';
+  await displayAnswer(answer);
+
+  /* ─── 4. Возвращаемся в покой ─── */
+  answeringActive = false;
+  currentLetterMask = null;
+  phase = 'idle';
+
+  questionEl.value = '';
+  sendBtn.disabled = false;
+  statusEl.textContent = 'поле дышит…';
+}
+
+sendBtn.onclick = onSubmit;
+questionEl.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    onSubmit();
+  }
+});
+
+/* ══════════════════ ЦИКЛ ══════════════════ */
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  const changed = animate(dt);
+  if (changed || dirty) { render(); dirty = false; }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
